@@ -20,6 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent
 GENEROS = ("Rock", "Pop", "Rap", "Electrónica", "Jazz", "Swing", "Vaudeville", "Avant-Garde", "Psicodelia", "Nu metal", "Alternative Metal", "Acid Jazz", "Funk", "Jazz funk", "Disco", "Breakcore", "Digital Core", "Bolero", "Ranchera", "Chanson", "Blues", "Blue Rock", "Funk Brasileiro", "P-Funk", "Psycodelic soul", "Clasica", "Barroco", "Opera", "Cabaret", "Dark Cabaret", "mUSICAL tHEATRE", "Broadway", "Music Hall", "Comedy", "Heavy Metal", "Thrash Metal", "Industrial Metal", "Mariachi", "Cumbia", "Cumbia Villera", "Cumbia Santafesina", "Cumbia Colombiana", "Cumbia Andina", "Cuarteto", "Tango", "Milonga", "Valls Criollo", "Zamba", "Chacarera", "Chamame", "Folklore Argentino", "Salsa", "Bachata", "J-pop", "K-pop", "Reggae", "Folk", "Gospel", "Hymno", "Noise", "Eurodisco", "Film score")
 MAXIMO_IMAGEN = 5 * 1024 * 1024
 MAXIMO_LOG = 5000
+AVATARES_PREDETERMINADOS = tuple(f"Default{numero}.jpg" for numero in range(1, 21))
 FORMATOS_IMAGEN = {
     "PNG": ".png",
     "JPEG": ".jpg",
@@ -32,7 +33,7 @@ FORMATOS_IMAGEN = {
 def create_app():
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = MAXIMO_IMAGEN + 64 * 1024
-    app.config["IMAGE_FOLDER"] = BASE_DIR / "imagenes_canciones"
+    app.config["IMAGE_FOLDER"] = Path(os.environ.get("IMAGE_FOLDER", BASE_DIR / "imagenes_canciones"))
     app.config["MONGODB_URI"] = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/")
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
     app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -47,7 +48,24 @@ def create_app():
     def index():
         if not session.get("user_id"):
             return redirect(url_for("login"))
-        return render_template("index.html", generos=GENEROS, username=session["username"])
+        try:
+            user = app.extensions["users_collection"].find_one(
+                {"_id": ObjectId(session["user_id"])},
+                {"avatar": 1, "default_avatar": 1},
+            )
+            if not user:
+                session.clear()
+                return redirect(url_for("login"))
+            avatar_url = _profile_avatar_url(app.extensions["users_collection"], user)
+        except PyMongoError:
+            app.logger.exception("No se pudo consultar la cuenta.")
+            return "No se pudo conectar con MongoDB.", 503
+        return render_template(
+            "index.html",
+            generos=GENEROS,
+            username=session["username"],
+            avatar_url=avatar_url,
+        )
 
     @app.get("/login")
     def login():
@@ -70,6 +88,7 @@ def create_app():
             "username": username,
             "username_key": username.casefold(),
             "password_hash": generate_password_hash(password),
+            "default_avatar": secrets.choice(AVATARES_PREDETERMINADOS),
         }
         try:
             users = app.extensions["users_collection"]
@@ -114,16 +133,28 @@ def create_app():
     def logo():
         return send_from_directory(BASE_DIR, "logo.png")
 
+    @app.get("/default-avatars/<filename>")
+    def default_avatar(filename):
+        if not session.get("user_id"):
+            return jsonify(error="Inicia sesión para ver las fotos de perfil."), 401
+        if filename not in AVATARES_PREDETERMINADOS:
+            return jsonify(error="Imagen no encontrada."), 404
+        return send_from_directory(BASE_DIR, filename)
+
     @app.get("/uploads/<path:filename>")
     def uploaded_image(filename):
         if not session.get("user_id"):
-            return jsonify(error="Inicia sesión para ver las portadas."), 401
+            return jsonify(error="Inicia sesión para ver las imágenes."), 401
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,255}", filename):
             return jsonify(error="Imagen no encontrada."), 404
         try:
             shared_image = app.extensions["songs_collection"].find_one({
                 "imagen": filename,
             }, {"_id": 1})
+            if not shared_image:
+                shared_image = app.extensions["users_collection"].find_one({
+                    "avatar": filename,
+                }, {"_id": 1})
         except PyMongoError:
             app.logger.exception("No se pudo comprobar el acceso a la portada.")
             return jsonify(error="No se pudo conectar con MongoDB."), 503
@@ -131,12 +162,82 @@ def create_app():
             return jsonify(error="Imagen no encontrada."), 404
         return send_from_directory(current_app.config["IMAGE_FOLDER"], filename)
 
+    @app.post("/api/me/avatar")
+    def update_avatar():
+        if not session.get("user_id"):
+            return jsonify(error="Inicia sesión para cambiar tu foto de perfil."), 401
+        try:
+            image_name = _save_uploaded_image(request.files.get("avatar"))
+        except ValueError as image_error:
+            return jsonify(error=str(image_error)), 400
+        except OSError:
+            app.logger.exception("No se pudo guardar la foto de perfil.")
+            return jsonify(error="No se pudo guardar la foto de perfil en el servidor."), 500
+        if not image_name:
+            return jsonify(error="Selecciona una imagen para tu foto de perfil."), 400
+
+        try:
+            users = app.extensions["users_collection"]
+            user_id = ObjectId(session["user_id"])
+            user = users.find_one({"_id": user_id}, {"avatar": 1})
+            if not user:
+                _remove_uploaded_image(image_name)
+                return jsonify(error="No se encontró la cuenta."), 404
+            previous_avatar = user.get("avatar")
+            result = users.update_one({"_id": user_id}, {"$set": {"avatar": image_name}})
+            if result.matched_count == 0:
+                _remove_uploaded_image(image_name)
+                return jsonify(error="No se encontró la cuenta."), 404
+            _remove_uploaded_image(previous_avatar)
+            return jsonify(avatar=url_for("uploaded_image", filename=image_name))
+        except PyMongoError:
+            _remove_uploaded_image(image_name)
+            app.logger.exception("No se pudo actualizar la foto de perfil.")
+            return jsonify(error="No se pudo actualizar la foto de perfil en MongoDB."), 503
+
+    @app.post("/api/account/password")
+    def update_password():
+        if not session.get("user_id"):
+            return jsonify(error="Inicia sesión para cambiar la contraseña."), 401
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        if len(new_password) < 8 or len(new_password) > 128:
+            return jsonify(error="La nueva contraseña debe tener entre 8 y 128 caracteres."), 400
+        if new_password != confirm_password:
+            return jsonify(error="La confirmación no coincide con la nueva contraseña."), 400
+
+        try:
+            users = app.extensions["users_collection"]
+            user_id = ObjectId(session["user_id"])
+            user = users.find_one({"_id": user_id}, {"password_hash": 1})
+            if not user:
+                return jsonify(error="No se encontró la cuenta."), 404
+            if not check_password_hash(user["password_hash"], current_password):
+                return jsonify(error="La contraseña actual es incorrecta."), 400
+            if check_password_hash(user["password_hash"], new_password):
+                return jsonify(error="La nueva contraseña debe ser distinta de la actual."), 400
+            result = users.update_one(
+                {"_id": user_id},
+                {"$set": {"password_hash": generate_password_hash(new_password)}},
+            )
+            if result.matched_count == 0:
+                return jsonify(error="No se encontró la cuenta."), 404
+            return jsonify(ok=True)
+        except PyMongoError:
+            app.logger.exception("No se pudo cambiar la contraseña.")
+            return jsonify(error="No se pudo actualizar la contraseña en MongoDB."), 503
+
     @app.get("/api/members")
     def list_members():
         if not session.get("user_id"):
             return jsonify(error="Inicia sesión para ver los miembros."), 401
         try:
-            users = list(app.extensions["users_collection"].find({}, {"username": 1}).sort("username", 1))
+            users = list(
+                app.extensions["users_collection"]
+                .find({}, {"username": 1, "avatar": 1, "default_avatar": 1})
+                .sort("username", 1)
+            )
             song_counts = {
                 item["_id"]: item["count"]
                 for item in app.extensions["songs_collection"].aggregate([
@@ -147,6 +248,7 @@ def create_app():
                 {
                     "id": str(user["_id"]),
                     "username": user["username"],
+                    "avatar": _profile_avatar_url(app.extensions["users_collection"], user),
                     "song_count": song_counts.get(str(user["_id"]), 0),
                 }
                 for user in users
@@ -166,7 +268,7 @@ def create_app():
         try:
             user = app.extensions["users_collection"].find_one(
                 {"_id": ObjectId(member_id)},
-                {"username": 1},
+                {"username": 1, "avatar": 1, "default_avatar": 1},
             )
             if not user:
                 return jsonify(error="Miembro no encontrado."), 404
@@ -175,7 +277,11 @@ def create_app():
                 _serialize_song(song)
                 for song in songs_collection.find({"user_id": member_id}).sort("nombre", 1)
             ]
-            return jsonify(username=user["username"], songs=songs)
+            return jsonify(
+                username=user["username"],
+                avatar=_profile_avatar_url(app.extensions["users_collection"], user),
+                songs=songs,
+            )
         except PyMongoError:
             app.logger.exception("No se pudo consultar el perfil del miembro.")
             return jsonify(error="No se pudo conectar con MongoDB."), 503
@@ -291,6 +397,21 @@ def create_app():
         return jsonify(error="La imagen supera el límite de 5 MB."), 413
 
     return app
+
+
+def _profile_avatar_url(users, user):
+    if user.get("avatar"):
+        return url_for("uploaded_image", filename=user["avatar"])
+
+    default_avatar = user.get("default_avatar")
+    if default_avatar not in AVATARES_PREDETERMINADOS:
+        default_avatar = secrets.choice(AVATARES_PREDETERMINADOS)
+        users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"default_avatar": default_avatar}},
+        )
+        user["default_avatar"] = default_avatar
+    return url_for("default_avatar", filename=default_avatar)
 
 
 def _read_song_data():

@@ -63,6 +63,72 @@ textarea {
   margin: 0;
 }
 
+.profile-avatar,
+.member-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.profile-avatar {
+  display: block;
+  object-fit: cover;
+}
+
+.avatar-initial {
+  display: grid;
+  place-items: center;
+  background: #e0e7ff;
+  color: #253b73;
+  font-weight: 750;
+}
+
+.account-view {
+  display: grid;
+  gap: 18px;
+}
+
+.account-profile {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.account-avatar {
+  width: 128px;
+  height: 128px;
+  flex: 0 0 auto;
+  border-radius: 14px;
+  object-fit: cover;
+}
+
+.account-form {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 440px);
+}
+
+.account-form h3,
+.account-form p {
+  margin-bottom: 0;
+}
+
+.account-form button {
+  justify-self: start;
+}
+
+.account-form .avatar-file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  cursor: pointer;
+}
+
+.account-note {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .page-header h1,
 h2,
 p {
@@ -303,7 +369,10 @@ button:focus-visible {
 
 .member-card {
   display: grid;
-  gap: 6px;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 4px;
   min-height: 84px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -312,6 +381,20 @@ button:focus-visible {
   color: var(--ink);
   cursor: pointer;
   text-align: left;
+}
+
+.member-avatar {
+  display: grid;
+  grid-row: 1 / span 2;
+  place-items: center;
+  overflow: hidden;
+  background: #e0e7ff;
+}
+
+.member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .member-card:hover {
@@ -333,6 +416,10 @@ button:focus-visible {
   align-items: center;
   gap: 14px;
   margin-bottom: 14px;
+}
+
+.member-profile-heading .member-avatar {
+  flex: 0 0 auto;
 }
 
 .member-profile-heading h2 {
@@ -535,6 +622,13 @@ button:focus-visible {
 
   .user-session {
     gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .account-profile {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .form-grid {

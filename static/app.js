@@ -8,6 +8,15 @@ const ratingInput = document.querySelector("#rating");
 const ratingValue = document.querySelector("#rating-value");
 const imageInput = document.querySelector("#image");
 const imagePreview = document.querySelector("#image-preview");
+const avatarForm = document.querySelector("#avatar-form");
+const avatarInput = document.querySelector("#avatar-input");
+const headerAvatar = document.querySelector("#header-avatar");
+const accountAvatar = document.querySelector("#account-avatar");
+const avatarSave = document.querySelector("#avatar-save");
+const avatarStatus = document.querySelector("#avatar-status");
+const passwordForm = document.querySelector("#password-form");
+const passwordSave = document.querySelector("#password-save");
+const passwordStatus = document.querySelector("#password-status");
 const removeImageWrap = document.querySelector("#remove-image-wrap");
 const removeImage = document.querySelector("#remove-image");
 const saveButton = document.querySelector("#save-button");
@@ -15,11 +24,14 @@ const cancelEdit = document.querySelector("#cancel-edit");
 const formTitle = document.querySelector("#form-title");
 const libraryTab = document.querySelector("#library-tab");
 const membersTab = document.querySelector("#members-tab");
+const accountTab = document.querySelector("#account-tab");
 const libraryView = document.querySelector("#library-view");
 const membersView = document.querySelector("#members-view");
+const accountView = document.querySelector("#account-view");
 const membersStatus = document.querySelector("#members-status");
 const memberList = document.querySelector("#member-list");
 const memberProfile = document.querySelector("#member-profile");
+const memberProfileAvatar = document.querySelector("#member-profile-avatar");
 const memberName = document.querySelector("#member-name");
 const memberProfileStatus = document.querySelector("#member-profile-status");
 const memberSongList = document.querySelector("#member-song-list");
@@ -27,6 +39,7 @@ const backToMembers = document.querySelector("#back-to-members");
 let editingId = null;
 let editingImage = null;
 let previewUrl = null;
+let avatarPreviewUrl = null;
 let searchTimer = null;
 
 function showStatus(message, isError = false) {
@@ -70,6 +83,22 @@ function makeElement(tag, className, text) {
   if (className) element.className = className;
   if (text !== undefined) element.textContent = text;
   return element;
+}
+
+function createAvatar(username, imageUrl, className) {
+  const avatar = makeElement("span", className);
+  const initial = makeElement("span", "avatar-initial", username.slice(0, 1).toUpperCase());
+  if (!imageUrl) {
+    avatar.append(initial);
+    return avatar;
+  }
+
+  const image = makeElement("img", "");
+  image.src = imageUrl;
+  image.alt = "";
+  image.addEventListener("error", () => avatar.replaceChildren(initial), { once: true });
+  avatar.append(image);
+  return avatar;
 }
 
 function renderSongs(songs) {
@@ -147,6 +176,7 @@ async function loadMembers() {
       const card = makeElement("button", "member-card");
       card.type = "button";
       card.append(
+        createAvatar(member.username, member.avatar, "member-avatar"),
         makeElement("span", "member-name", member.username),
         makeElement("span", "member-song-count", `${member.song_count} canción${member.song_count === 1 ? "" : "es"}`),
       );
@@ -165,10 +195,12 @@ async function openMemberProfile(member) {
   memberProfileStatus.classList.remove("error");
   memberProfileStatus.textContent = "Cargando canciones…";
   memberName.textContent = member.username;
+  memberProfileAvatar.replaceChildren(createAvatar(member.username, member.avatar, "member-avatar"));
   memberSongList.replaceChildren();
   try {
     const result = await api(`/api/members/${encodeURIComponent(member.id)}`);
     memberName.textContent = result.username;
+    memberProfileAvatar.replaceChildren(createAvatar(result.username, result.avatar, "member-avatar"));
     memberProfileStatus.textContent = `${result.songs.length} canción${result.songs.length === 1 ? "" : "es"}`;
     renderMemberSongs(result.songs);
   } catch (error) {
@@ -284,6 +316,63 @@ imageInput.addEventListener("change", () => {
   removeImage.checked = false;
 });
 
+avatarInput.addEventListener("change", () => {
+  const file = avatarInput.files[0];
+  avatarSave.disabled = !file;
+  avatarStatus.textContent = "";
+  avatarStatus.classList.remove("error");
+  if (!file) return;
+  if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+  avatarPreviewUrl = URL.createObjectURL(file);
+  accountAvatar.src = avatarPreviewUrl;
+});
+
+avatarForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!avatarInput.files[0]) return;
+  avatarSave.disabled = true;
+  avatarStatus.classList.remove("error");
+  avatarStatus.textContent = "Guardando foto…";
+  try {
+    const result = await api("/api/me/avatar", {
+      method: "POST",
+      body: new FormData(avatarForm),
+    });
+    if (avatarPreviewUrl) {
+      URL.revokeObjectURL(avatarPreviewUrl);
+      avatarPreviewUrl = null;
+    }
+    headerAvatar.src = result.avatar;
+    accountAvatar.src = result.avatar;
+    avatarInput.value = "";
+    avatarStatus.textContent = "Foto actualizada.";
+  } catch (error) {
+    avatarStatus.textContent = error.message;
+    avatarStatus.classList.add("error");
+    avatarSave.disabled = false;
+  }
+});
+
+passwordForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  passwordSave.disabled = true;
+  passwordStatus.classList.remove("error");
+  passwordStatus.textContent = "Actualizando contraseña…";
+  try {
+    await api("/api/account/password", {
+      method: "POST",
+      body: new FormData(passwordForm),
+    });
+    passwordForm.reset();
+    passwordStatus.textContent = "Contraseña actualizada.";
+  } catch (error) {
+    passwordStatus.textContent = error.message;
+    passwordStatus.classList.add("error");
+  } finally {
+    passwordSave.disabled = false;
+  }
+});
+
 removeImage.addEventListener("change", () => {
   if (removeImage.checked) {
     imageInput.value = "";
@@ -296,23 +385,26 @@ removeImage.addEventListener("change", () => {
 
 document.querySelector("#clear-button").addEventListener("click", resetForm);
 cancelEdit.addEventListener("click", resetForm);
-libraryTab.addEventListener("click", () => {
-  libraryView.classList.remove("hidden");
-  membersView.classList.add("hidden");
-  libraryTab.classList.replace("button-quiet", "button-primary");
-  membersTab.classList.replace("button-primary", "button-quiet");
-  libraryTab.setAttribute("aria-current", "page");
-  membersTab.setAttribute("aria-current", "false");
-});
+function showView(activeTab) {
+  for (const [tab, view] of [
+    [libraryTab, libraryView],
+    [membersTab, membersView],
+    [accountTab, accountView],
+  ]) {
+    const active = tab === activeTab;
+    view.classList.toggle("hidden", !active);
+    tab.classList.toggle("button-primary", active);
+    tab.classList.toggle("button-quiet", !active);
+    tab.setAttribute("aria-current", active ? "page" : "false");
+  }
+}
+
+libraryTab.addEventListener("click", () => showView(libraryTab));
 membersTab.addEventListener("click", () => {
-  libraryView.classList.add("hidden");
-  membersView.classList.remove("hidden");
-  libraryTab.classList.replace("button-primary", "button-quiet");
-  membersTab.classList.replace("button-quiet", "button-primary");
-  libraryTab.setAttribute("aria-current", "false");
-  membersTab.setAttribute("aria-current", "page");
+  showView(membersTab);
   loadMembers();
 });
+accountTab.addEventListener("click", () => showView(accountTab));
 backToMembers.addEventListener("click", () => {
   memberProfile.classList.add("hidden");
   memberList.classList.remove("hidden");

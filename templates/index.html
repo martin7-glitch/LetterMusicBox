@@ -18,6 +18,7 @@
         </div>
         <div class="header-tools">
           <div class="user-session">
+            <img id="header-avatar" class="profile-avatar" src="{{ avatar_url }}" alt="Foto de perfil de {{ username }}">
             <span>{{ username }}</span>
             <form method="post" action="{{ url_for('logout') }}">
               <button class="button button-quiet" type="submit">Cerrar sesión</button>
@@ -30,6 +31,7 @@
       <nav class="view-tabs" aria-label="Secciones de la aplicación">
         <button class="button button-primary" id="library-tab" type="button" aria-current="page">Mi biblioteca</button>
         <button class="button button-quiet" id="members-tab" type="button" aria-current="false">Miembros</button>
+        <button class="button button-quiet" id="account-tab" type="button" aria-current="false">Cuenta</button>
       </nav>
 
       <div id="library-view">
@@ -125,11 +127,54 @@
         <div id="member-profile" class="hidden">
           <div class="member-profile-heading">
             <button class="button button-quiet" id="back-to-members" type="button">Volver a miembros</button>
+            <div id="member-profile-avatar" class="member-profile-avatar" aria-hidden="true"></div>
             <h2 id="member-name"></h2>
           </div>
           <p id="member-profile-status" class="status" role="status" aria-live="polite"></p>
           <div id="member-song-list" class="song-grid"></div>
         </div>
+      </section>
+
+      <section id="account-view" class="account-view hidden" aria-labelledby="account-title">
+        <section class="panel" aria-labelledby="account-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Cuenta</p>
+              <h2 id="account-title">Mi cuenta</h2>
+            </div>
+          </div>
+          <div class="account-profile">
+            <img id="account-avatar" class="account-avatar" src="{{ avatar_url }}" alt="Foto de perfil de {{ username }}">
+            <form id="avatar-form" class="account-form">
+              <h3>Foto de perfil</h3>
+              <p class="account-note">Puedes cambiar la imagen asignada a tu cuenta cuando quieras.</p>
+              <label class="button button-quiet avatar-file-label" for="avatar-input">Elegir foto</label>
+              <input id="avatar-input" class="sr-only" type="file" name="avatar" accept="image/png,image/jpeg,image/gif,image/bmp,image/webp">
+              <button class="button button-primary" id="avatar-save" type="submit" disabled>Guardar foto</button>
+              <p id="avatar-status" class="status" role="status" aria-live="polite"></p>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="password-title">
+          <h2 id="password-title">Cambiar contraseña</h2>
+          <form id="password-form" class="account-form">
+            <label>
+              Contraseña actual
+              <input name="current_password" type="password" autocomplete="current-password" required>
+            </label>
+            <label>
+              Nueva contraseña
+              <input name="new_password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required>
+            </label>
+            <label>
+              Confirmar nueva contraseña
+              <input name="confirm_password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required>
+            </label>
+            <button class="button button-primary" id="password-save" type="submit">Actualizar contraseña</button>
+            <p id="password-status" class="status" role="status" aria-live="polite"></p>
+          </form>
+        </section>
       </section>
     </main>
   </body>
