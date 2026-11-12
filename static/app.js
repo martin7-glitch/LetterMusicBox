@@ -13,6 +13,17 @@ const removeImage = document.querySelector("#remove-image");
 const saveButton = document.querySelector("#save-button");
 const cancelEdit = document.querySelector("#cancel-edit");
 const formTitle = document.querySelector("#form-title");
+const libraryTab = document.querySelector("#library-tab");
+const membersTab = document.querySelector("#members-tab");
+const libraryView = document.querySelector("#library-view");
+const membersView = document.querySelector("#members-view");
+const membersStatus = document.querySelector("#members-status");
+const memberList = document.querySelector("#member-list");
+const memberProfile = document.querySelector("#member-profile");
+const memberName = document.querySelector("#member-name");
+const memberProfileStatus = document.querySelector("#member-profile-status");
+const memberSongList = document.querySelector("#member-song-list");
+const backToMembers = document.querySelector("#back-to-members");
 let editingId = null;
 let editingImage = null;
 let previewUrl = null;
@@ -32,11 +43,26 @@ async function api(url, options = {}) {
   return result;
 }
 
-function formatStars(value) {
+function createStars(value) {
   const rating = Math.max(0, Math.min(Number(value) || 0, 5));
   const whole = Math.floor(rating);
-  const half = rating - whole >= 0.5 ? "⯨" : "";
-  return "★".repeat(whole) + half + "☆".repeat(5 - whole - (half ? 1 : 0));
+  const hasHalf = rating - whole >= 0.5;
+  const stars = makeElement("p", "song-stars");
+  stars.setAttribute("role", "img");
+  stars.setAttribute("aria-label", `Calificación: ${rating.toFixed(1)} de 5`);
+
+  for (let index = 0; index < 5; index += 1) {
+    const isFull = index < whole;
+    const isHalf = index === whole && hasHalf;
+    const star = makeElement(
+      "span",
+      isFull ? "song-star song-star-full" : isHalf ? "song-star song-star-half" : "song-star",
+      isFull ? "★" : "☆",
+    );
+    star.setAttribute("aria-hidden", "true");
+    stars.append(star);
+  }
+  return stars;
 }
 
 function makeElement(tag, className, text) {
@@ -55,29 +81,35 @@ function renderSongs(songs) {
   }
 
   for (const song of songs) {
-    const card = makeElement("article", "song-card");
-    if (song.imagen) {
-      const cover = makeElement("img", "cover");
-      cover.src = `/uploads/${encodeURIComponent(song.imagen)}`;
-      cover.alt = `Portada de ${song.nombre}`;
-      cover.loading = "lazy";
-      cover.addEventListener("error", () => {
-        const placeholder = makeElement("div", "cover-placeholder", song.nombre.slice(0, 1).toUpperCase());
-        cover.replaceWith(placeholder);
-      }, { once: true });
-      card.append(cover);
-    } else {
-      card.append(makeElement("div", "cover-placeholder", song.nombre.slice(0, 1).toUpperCase()));
-    }
+    songList.append(createSongCard(song, true));
+  }
+}
 
-    const info = makeElement("div", "song-info");
-    info.append(makeElement("h3", "", song.nombre));
-    info.append(makeElement("p", "song-artist", song.artista));
-    info.append(makeElement("p", "song-genre", song.genero));
-    info.append(makeElement("p", "song-stars", formatStars(song.calificacion)));
-    card.append(info);
-    if (song.log) card.append(makeElement("p", "song-log", song.log));
+function createSongCard(song, showActions) {
+  const card = makeElement("article", "song-card");
+  if (song.imagen) {
+    const cover = makeElement("img", "cover");
+    cover.src = `/uploads/${encodeURIComponent(song.imagen)}`;
+    cover.alt = `Portada de ${song.nombre}`;
+    cover.loading = "lazy";
+    cover.addEventListener("error", () => {
+      const placeholder = makeElement("div", "cover-placeholder", song.nombre.slice(0, 1).toUpperCase());
+      cover.replaceWith(placeholder);
+    }, { once: true });
+    card.append(cover);
+  } else {
+    card.append(makeElement("div", "cover-placeholder", song.nombre.slice(0, 1).toUpperCase()));
+  }
 
+  const info = makeElement("div", "song-info");
+  info.append(makeElement("h3", "", song.nombre));
+  info.append(makeElement("p", "song-artist", song.artista));
+  info.append(makeElement("p", "song-genre", song.genero));
+  info.append(createStars(song.calificacion));
+  card.append(info);
+  if (song.log) card.append(makeElement("p", "song-log", song.log));
+
+  if (showActions) {
     const actions = makeElement("div", "card-actions");
     const editButton = makeElement("button", "", "Editar");
     editButton.type = "button";
@@ -87,7 +119,61 @@ function renderSongs(songs) {
     deleteButton.addEventListener("click", () => deleteSong(song));
     actions.append(editButton, deleteButton);
     card.append(actions);
-    songList.append(card);
+  }
+  return card;
+}
+
+function renderMemberSongs(songs) {
+  memberSongList.replaceChildren();
+  if (!songs.length) {
+    memberSongList.append(makeElement("p", "empty-state", "Este miembro todavía no ha subido canciones."));
+    return;
+  }
+  for (const song of songs) {
+    memberSongList.append(createSongCard(song, false));
+  }
+}
+
+async function loadMembers() {
+  memberList.replaceChildren();
+  memberList.classList.remove("hidden");
+  memberProfile.classList.add("hidden");
+  membersStatus.classList.remove("error");
+  membersStatus.textContent = "Cargando miembros…";
+  try {
+    const result = await api("/api/members");
+    membersStatus.textContent = result.members.length ? "" : "Todavía no hay otros miembros registrados.";
+    for (const member of result.members) {
+      const card = makeElement("button", "member-card");
+      card.type = "button";
+      card.append(
+        makeElement("span", "member-name", member.username),
+        makeElement("span", "member-song-count", `${member.song_count} canción${member.song_count === 1 ? "" : "es"}`),
+      );
+      card.addEventListener("click", () => openMemberProfile(member));
+      memberList.append(card);
+    }
+  } catch (error) {
+    membersStatus.textContent = error.message;
+    membersStatus.classList.add("error");
+  }
+}
+
+async function openMemberProfile(member) {
+  memberList.classList.add("hidden");
+  memberProfile.classList.remove("hidden");
+  memberProfileStatus.classList.remove("error");
+  memberProfileStatus.textContent = "Cargando canciones…";
+  memberName.textContent = member.username;
+  memberSongList.replaceChildren();
+  try {
+    const result = await api(`/api/members/${encodeURIComponent(member.id)}`);
+    memberName.textContent = result.username;
+    memberProfileStatus.textContent = `${result.songs.length} canción${result.songs.length === 1 ? "" : "es"}`;
+    renderMemberSongs(result.songs);
+  } catch (error) {
+    memberProfileStatus.textContent = error.message;
+    memberProfileStatus.classList.add("error");
   }
 }
 
@@ -210,6 +296,27 @@ removeImage.addEventListener("change", () => {
 
 document.querySelector("#clear-button").addEventListener("click", resetForm);
 cancelEdit.addEventListener("click", resetForm);
+libraryTab.addEventListener("click", () => {
+  libraryView.classList.remove("hidden");
+  membersView.classList.add("hidden");
+  libraryTab.classList.replace("button-quiet", "button-primary");
+  membersTab.classList.replace("button-primary", "button-quiet");
+  libraryTab.setAttribute("aria-current", "page");
+  membersTab.setAttribute("aria-current", "false");
+});
+membersTab.addEventListener("click", () => {
+  libraryView.classList.add("hidden");
+  membersView.classList.remove("hidden");
+  libraryTab.classList.replace("button-primary", "button-quiet");
+  membersTab.classList.replace("button-quiet", "button-primary");
+  libraryTab.setAttribute("aria-current", "false");
+  membersTab.setAttribute("aria-current", "page");
+  loadMembers();
+});
+backToMembers.addEventListener("click", () => {
+  memberProfile.classList.add("hidden");
+  memberList.classList.remove("hidden");
+});
 searchInput.addEventListener("input", () => {
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(loadSongs, 180);

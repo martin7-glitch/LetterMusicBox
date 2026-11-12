@@ -281,8 +281,63 @@ button:focus-visible {
   background: #f8fafc;
 }
 
+.view-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
 .library {
   margin-top: 38px;
+}
+
+.members-view {
+  margin-top: 18px;
+}
+
+.member-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.member-card {
+  display: grid;
+  gap: 6px;
+  min-height: 84px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.member-card:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.member-name {
+  font-weight: 750;
+}
+
+.member-song-count {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.member-profile-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.member-profile-heading h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .library-heading {
@@ -368,10 +423,33 @@ button:focus-visible {
 }
 
 .song-stars {
+  display: flex;
+  gap: 1px;
   margin: 8px 0 0;
-  color: #d97706;
   font-size: 0.95rem;
   letter-spacing: 0.03em;
+}
+
+.song-star {
+  color: #cbd5e1;
+}
+
+.song-star-full {
+  color: #d97706;
+}
+
+.song-star-half {
+  position: relative;
+  display: inline-block;
+}
+
+.song-star-half::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 50%;
+  overflow: hidden;
+  color: #d97706;
+  content: "★";
 }
 
 .song-log {

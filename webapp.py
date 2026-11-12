@@ -121,16 +121,64 @@ def create_app():
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,255}", filename):
             return jsonify(error="Imagen no encontrada."), 404
         try:
-            owned_image = app.extensions["songs_collection"].find_one({
-                "user_id": session["user_id"],
+            shared_image = app.extensions["songs_collection"].find_one({
                 "imagen": filename,
-            })
+            }, {"_id": 1})
         except PyMongoError:
             app.logger.exception("No se pudo comprobar el acceso a la portada.")
             return jsonify(error="No se pudo conectar con MongoDB."), 503
-        if not owned_image:
+        if not shared_image:
             return jsonify(error="Imagen no encontrada."), 404
         return send_from_directory(current_app.config["IMAGE_FOLDER"], filename)
+
+    @app.get("/api/members")
+    def list_members():
+        if not session.get("user_id"):
+            return jsonify(error="Inicia sesión para ver los miembros."), 401
+        try:
+            users = list(app.extensions["users_collection"].find({}, {"username": 1}).sort("username", 1))
+            song_counts = {
+                item["_id"]: item["count"]
+                for item in app.extensions["songs_collection"].aggregate([
+                    {"$group": {"_id": "$user_id", "count": {"$sum": 1}}},
+                ])
+            }
+            members = [
+                {
+                    "id": str(user["_id"]),
+                    "username": user["username"],
+                    "song_count": song_counts.get(str(user["_id"]), 0),
+                }
+                for user in users
+                if str(user["_id"]) != session["user_id"]
+            ]
+            return jsonify(members=members)
+        except PyMongoError:
+            app.logger.exception("No se pudo consultar la lista de miembros.")
+            return jsonify(error="No se pudo conectar con MongoDB."), 503
+
+    @app.get("/api/members/<member_id>")
+    def get_member(member_id):
+        if not session.get("user_id"):
+            return jsonify(error="Inicia sesión para ver los perfiles."), 401
+        if not ObjectId.is_valid(member_id):
+            return jsonify(error="Miembro no encontrado."), 404
+        try:
+            user = app.extensions["users_collection"].find_one(
+                {"_id": ObjectId(member_id)},
+                {"username": 1},
+            )
+            if not user:
+                return jsonify(error="Miembro no encontrado."), 404
+            songs_collection = app.extensions["songs_collection"]
+            songs = [
+                _serialize_song(song)
+                for song in songs_collection.find({"user_id": member_id}).sort("nombre", 1)
+            ]
+            return jsonify(username=user["username"], songs=songs)
+        except PyMongoError:
+            app.logger.exception("No se pudo consultar el perfil del miembro.")
+            return jsonify(error="No se pudo conectar con MongoDB."), 503
 
     @app.get("/api/songs")
     def list_songs():
