@@ -17,7 +17,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 
 BASE_DIR = Path(__file__).resolve().parent
-GENEROS = ("Rock", "Pop", "Rap", "Electrónica")
+GENEROS = ("Rock", "Pop", "Rap", "Electrónica", "Jazz", "Swing", "Vaudeville", "Avant-Garde", "Psicodelia", "Nu metal", "Alternative Metal", "Acid Jazz", "Funk", "Jazz funk", "Disco", "Breakcore", "Digital Core", "Bolero", "Ranchera", "Chanson", "Blues", "Blue Rock", "Funk Brasileiro", "P-Funk", "Psycodelic soul", "Clasica", "Barroco", "Opera", "Cabaret", "Dark Cabaret", "mUSICAL tHEATRE", "Broadway", "Music Hall", "Comedy", "Heavy Metal", "Thrash Metal", "Industrial Metal", "Mariachi", "Cumbia", "Cumbia Villera", "Cumbia Santafesina", "Cumbia Colombiana", "Cumbia Andina", "Cuarteto", "Tango", "Milonga", "Valls Criollo", "Zamba", "Chacarera", "Chamame", "Folklore Argentino", "Salsa", "Bachata", "J-pop", "K-pop", "Reggae", "Folk", "Gospel", "Hymno", "Noise", "Eurodisco", "Film score")
 MAXIMO_IMAGEN = 5 * 1024 * 1024
 MAXIMO_LOG = 5000
 FORMATOS_IMAGEN = {
