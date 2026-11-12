@@ -16,7 +16,15 @@
           <h1>LetterMusicBox</h1>
           <p class="subtitle">Como Letterbox, pero para música.</p>
         </div>
-        <img class="logo" src="{{ url_for('logo') }}" alt="Logo de LetterMusicBox">
+        <div class="header-tools">
+          <div class="user-session">
+            <span>{{ username }}</span>
+            <form method="post" action="{{ url_for('logout') }}">
+              <button class="button button-quiet" type="submit">Cerrar sesión</button>
+            </form>
+          </div>
+          <img class="logo" src="{{ url_for('logo') }}" alt="Logo de LetterMusicBox">
+        </div>
       </header>
 
       <section class="panel" aria-labelledby="form-title">

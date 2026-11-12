@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f3f5f9">
+    <title>Iniciar sesión | LetterMusicBox</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell auth-shell">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Tu biblioteca personal</p>
+          <h1>LetterMusicBox</h1>
+          <p class="subtitle">Inicia sesión o crea una cuenta.</p>
+        </div>
+        <img class="logo" src="{{ url_for('logo') }}" alt="Logo de LetterMusicBox">
+      </header>
+
+      {% for message in get_flashed_messages() %}
+      <p class="auth-message" role="alert">{{ message }}</p>
+      {% endfor %}
+
+      <section class="panel auth-panel" aria-labelledby="login-title">
+        <h2 id="login-title">Iniciar sesión</h2>
+        <form class="auth-form" method="post" action="{{ url_for('authenticate') }}">
+          <label>
+            Usuario
+            <input name="username" minlength="3" maxlength="30" autocomplete="username" required>
+          </label>
+          <label>
+            Contraseña
+            <input name="password" type="password" minlength="8" maxlength="128" autocomplete="current-password" required>
+          </label>
+          <button class="button button-primary" type="submit">Entrar</button>
+        </form>
+      </section>
+
+      <section class="panel auth-panel" aria-labelledby="register-title">
+        <h2 id="register-title">Crear cuenta</h2>
+        <p class="auth-note">El usuario debe tener entre 3 y 30 caracteres. La contraseña, entre 8 y 128.</p>
+        <form class="auth-form" method="post" action="{{ url_for('register') }}">
+          <label>
+            Usuario
+            <input name="username" minlength="3" maxlength="30" pattern="[A-Za-z0-9_.-]+" autocomplete="username" required>
+          </label>
+          <label>
+            Contraseña
+            <input name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required>
+          </label>
+          <button class="button button-quiet" type="submit">Registrarme</button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

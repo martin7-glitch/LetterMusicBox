@@ -2,16 +2,18 @@ import io
 import math
 import os
 import re
+import secrets
 from pathlib import Path
 from uuid import uuid4
 
 from bson import ObjectId
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, flash, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 from flask import current_app
 from PIL import Image, UnidentifiedImageError
 from pymongo import MongoClient
-from pymongo.errors import PyMongoError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -32,14 +34,81 @@ def create_app():
     app.config["MAX_CONTENT_LENGTH"] = MAXIMO_IMAGEN + 64 * 1024
     app.config["IMAGE_FOLDER"] = BASE_DIR / "imagenes_canciones"
     app.config["MONGODB_URI"] = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/")
+    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
     client = MongoClient(app.config["MONGODB_URI"], serverSelectionTimeoutMS=2000)
     app.extensions["mongodb_client"] = client
     app.extensions["songs_collection"] = client["lettermusicbox"]["canciones"]
+    app.extensions["users_collection"] = client["lettermusicbox"]["usuarios"]
 
     @app.get("/")
     def index():
-        return render_template("index.html", generos=GENEROS)
+        if not session.get("user_id"):
+            return redirect(url_for("login"))
+        return render_template("index.html", generos=GENEROS, username=session["username"])
+
+    @app.get("/login")
+    def login():
+        if session.get("user_id"):
+            return redirect(url_for("index"))
+        return render_template("login.html")
+
+    @app.post("/register")
+    def register():
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{3,30}", username):
+            flash("El usuario debe tener entre 3 y 30 caracteres: letras, números, punto, guion o guion bajo.")
+            return redirect(url_for("login"))
+        if len(password) < 8 or len(password) > 128:
+            flash("La contraseña debe tener entre 8 y 128 caracteres.")
+            return redirect(url_for("login"))
+
+        user = {
+            "username": username,
+            "username_key": username.casefold(),
+            "password_hash": generate_password_hash(password),
+        }
+        try:
+            users = app.extensions["users_collection"]
+            users.create_index("username_key", unique=True)
+            result = users.insert_one(user)
+        except DuplicateKeyError:
+            flash("Ese nombre de usuario ya está registrado.")
+            return redirect(url_for("login"))
+        except PyMongoError:
+            app.logger.exception("No se pudo crear la cuenta.")
+            return "No se pudo conectar con MongoDB.", 503
+
+        session.clear()
+        session["user_id"] = str(result.inserted_id)
+        session["username"] = username
+        return redirect(url_for("index"))
+
+    @app.post("/login")
+    def authenticate():
+        username_key = request.form.get("username", "").strip().casefold()
+        password = request.form.get("password", "")
+        try:
+            user = app.extensions["users_collection"].find_one({"username_key": username_key})
+        except PyMongoError:
+            app.logger.exception("No se pudo consultar la cuenta.")
+            return "No se pudo conectar con MongoDB.", 503
+        if not user or not check_password_hash(user["password_hash"], password):
+            flash("Usuario o contraseña incorrectos.")
+            return redirect(url_for("login"))
+
+        session.clear()
+        session["user_id"] = str(user["_id"])
+        session["username"] = user["username"]
+        return redirect(url_for("index"))
+
+    @app.post("/logout")
+    def logout():
+        session.clear()
+        return redirect(url_for("login"))
 
     @app.get("/logo.png")
     def logo():
@@ -47,15 +116,29 @@ def create_app():
 
     @app.get("/uploads/<path:filename>")
     def uploaded_image(filename):
+        if not session.get("user_id"):
+            return jsonify(error="Inicia sesión para ver las portadas."), 401
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,255}", filename):
+            return jsonify(error="Imagen no encontrada."), 404
+        try:
+            owned_image = app.extensions["songs_collection"].find_one({
+                "user_id": session["user_id"],
+                "imagen": filename,
+            })
+        except PyMongoError:
+            app.logger.exception("No se pudo comprobar el acceso a la portada.")
+            return jsonify(error="No se pudo conectar con MongoDB."), 503
+        if not owned_image:
             return jsonify(error="Imagen no encontrada."), 404
         return send_from_directory(current_app.config["IMAGE_FOLDER"], filename)
 
     @app.get("/api/songs")
     def list_songs():
+        if not session.get("user_id"):
+            return jsonify(error="Inicia sesión para ver tus canciones."), 401
         query = request.args.get("q", "").strip()[:100]
         genre = request.args.get("genre", "").strip()
-        criteria = {}
+        criteria = {"user_id": session["user_id"]}
         if query:
             escaped_query = re.escape(query)
             criteria["$or"] = [
@@ -76,6 +159,8 @@ def create_app():
 
     @app.post("/api/songs")
     def create_song():
+        if not session.get("user_id"):
+            return jsonify(error="Inicia sesión para guardar canciones."), 401
         data, error = _read_song_data()
         if error:
             return jsonify(error=error), 400
@@ -87,6 +172,7 @@ def create_app():
             app.logger.exception("No se pudo guardar la portada.")
             return jsonify(error="No se pudo guardar la portada en el servidor."), 500
         data["imagen"] = image_name
+        data["user_id"] = session["user_id"]
         try:
             result = app.extensions["songs_collection"].insert_one(data)
             data["_id"] = result.inserted_id
@@ -98,6 +184,8 @@ def create_app():
 
     @app.put("/api/songs/<song_id>")
     def update_song(song_id):
+        if not session.get("user_id"):
+            return jsonify(error="Inicia sesión para editar canciones."), 401
         if not ObjectId.is_valid(song_id):
             return jsonify(error="Canción no encontrada."), 404
         data, error = _read_song_data()
@@ -118,7 +206,10 @@ def create_app():
 
         try:
             collection = app.extensions["songs_collection"]
-            result = collection.update_one({"_id": ObjectId(song_id)}, {"$set": data})
+            result = collection.update_one(
+                {"_id": ObjectId(song_id), "user_id": session["user_id"]},
+                {"$set": data},
+            )
             if result.matched_count == 0:
                 _remove_uploaded_image(image_name)
                 return jsonify(error="Canción no encontrada."), 404
@@ -131,10 +222,15 @@ def create_app():
 
     @app.delete("/api/songs/<song_id>")
     def delete_song(song_id):
+        if not session.get("user_id"):
+            return jsonify(error="Inicia sesión para eliminar canciones."), 401
         if not ObjectId.is_valid(song_id):
             return jsonify(error="Canción no encontrada."), 404
         try:
-            result = app.extensions["songs_collection"].delete_one({"_id": ObjectId(song_id)})
+            result = app.extensions["songs_collection"].delete_one({
+                "_id": ObjectId(song_id),
+                "user_id": session["user_id"],
+            })
             if result.deleted_count == 0:
                 return jsonify(error="Canción no encontrada."), 404
             return jsonify(ok=True)

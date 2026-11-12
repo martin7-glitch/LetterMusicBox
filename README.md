@@ -16,7 +16,9 @@ Las portadas elegidas se copian a la carpeta `covers/`; MongoDB guarda la ruta d
 3. Ejecuta `python webapp.py`.
 4. Abre <http://127.0.0.1:5000> en el navegador.
 
-La versión web usa la misma base `lettermusicbox` y colección `canciones` que la aplicación de escritorio. Las portadas se guardan en `imagenes_canciones/`, compartida con `page.py`, y no se incluyen en Git. Por defecto, el servidor solo escucha en tu computadora. Para publicarla en internet hace falta desplegar el backend y configurar una base de datos accesible desde ese servidor; no publiques MongoDB directamente. Puedes configurar la conexión con la variable de entorno `MONGODB_URI`.
+La versión web usa la base `lettermusicbox` y colección `canciones`. Cada visitante debe crear una cuenta e iniciar sesión; la web solo muestra y modifica canciones asociadas a esa cuenta. Los usuarios no se repiten (ignorando mayúsculas/minúsculas) y las contraseñas se guardan hasheadas. Los registros anteriores, que no tienen propietario, no se muestran en la web. `page.py` es la aplicación de escritorio y no usa estas cuentas.
+
+Las portadas se guardan en `imagenes_canciones/` en el servidor y no se incluyen en Git. Por defecto, el servidor solo escucha en tu computadora. Para publicarla en internet hace falta desplegar el backend y configurar una base de datos accesible desde ese servidor; no publiques MongoDB directamente. Puedes configurar la conexión con la variable de entorno `MONGODB_URI`.
 
 ### Desplegar en Render
 
@@ -25,7 +27,7 @@ Configura el servicio web con estos comandos:
 - **Build Command:** `pip install -r requirements.txt`
 - **Start Command:** `gunicorn --bind 0.0.0.0:$PORT webapp:app`
 
-En **Environment**, configura `MONGODB_URI` con la URI de una base MongoDB accesible desde Render. La app Flask se exporta como `app` en `webapp.py`.
+En **Environment**, configura `MONGODB_URI` con la URI de una base MongoDB accesible desde Render y `SECRET_KEY` con un valor secreto estable para que las sesiones sigan funcionando tras reinicios. La app Flask se exporta como `app` en `webapp.py`.
 
 _hola profe como anda? este es nuestro repositorio github_
 

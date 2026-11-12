@@ -46,6 +46,23 @@ textarea {
   margin-bottom: 26px;
 }
 
+.header-tools,
+.user-session {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-session span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.user-session form {
+  margin: 0;
+}
+
 .page-header h1,
 h2,
 p {
@@ -94,6 +111,44 @@ p {
 
 .panel {
   padding: 24px;
+}
+
+.auth-shell {
+  width: min(100% - 24px, 480px);
+  padding-top: 28px;
+}
+
+.auth-panel {
+  margin-bottom: 16px;
+}
+
+.auth-panel h2 {
+  margin-bottom: 16px;
+  color: #172554;
+  font-size: 1.2rem;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-form button {
+  justify-self: start;
+}
+
+.auth-note {
+  margin: -8px 0 16px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.auth-message {
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .section-heading {
@@ -392,6 +447,16 @@ button:focus-visible {
   .logo {
     width: 58px;
     height: 58px;
+  }
+
+  .header-tools {
+    align-items: flex-end;
+    flex-direction: column-reverse;
+    gap: 6px;
+  }
+
+  .user-session {
+    gap: 8px;
   }
 
   .form-grid {
